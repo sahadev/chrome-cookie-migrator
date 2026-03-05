@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+*.enc
+cookies_backup.json
+cookies_verify.json
