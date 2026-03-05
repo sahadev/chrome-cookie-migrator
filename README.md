@@ -285,13 +285,18 @@ cp ~/Library/Application\ Support/Google/Chrome/Default/Cookies.backup.20260305_
 
 ## 常见问题
 
-### Q: 运行时报 "Google Chrome is currently running"
+### Q: 运行时报 Chrome 进程仍在运行
 
-必须完全退出 Chrome。按 `Cmd+Q`（不是点击窗口关闭按钮）。如果仍然报错：
+工具会检测所有 Chrome 相关进程（包括后台 helper 进程），并提示是否自动终止。输入 `y` 即可。
+
+如果选择手动处理，按 `Cmd+Q` 退出 Chrome 后，再确认没有残留进程：
 
 ```bash
-# 强制结束 Chrome 进程
-killall "Google Chrome"
+# 检查是否有残留进程
+pgrep -f "Google Chrome"
+
+# 如果有，强制结束
+pkill -f "Google Chrome"
 ```
 
 ### Q: 运行时报 "Could not retrieve Chrome Safe Storage password"

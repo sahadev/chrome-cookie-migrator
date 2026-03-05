@@ -123,24 +123,66 @@ def get_cookie_db_path(profile: str = "Default") -> str:
     return path
 
 
-def is_chrome_running() -> bool:
-    """Check if Chrome is currently running."""
+def get_chrome_pids() -> list[int]:
+    """Return PIDs of all Chrome-related processes (main + helpers)."""
     try:
-        result = subprocess.run(
-            ["pgrep", "-x", "Google Chrome"],
-            capture_output=True,
+        output = subprocess.check_output(
+            ["pgrep", "-f", "Google Chrome"], stderr=subprocess.DEVNULL
         )
-        return result.returncode == 0
-    except FileNotFoundError:
-        return False
+        return [int(p) for p in output.decode().strip().split("\n") if p.strip()]
+    except subprocess.CalledProcessError:
+        return []
+
+
+def is_chrome_running() -> bool:
+    return len(get_chrome_pids()) > 0
+
+
+def kill_chrome_processes():
+    """Kill all Chrome processes and wait for them to exit."""
+    pids = get_chrome_pids()
+    if not pids:
+        return
+
+    print(f"Terminating {len(pids)} Chrome process(es)...")
+    subprocess.run(["pkill", "-f", "Google Chrome"], stderr=subprocess.DEVNULL)
+
+    import time
+
+    for _ in range(30):
+        if not get_chrome_pids():
+            print("All Chrome processes terminated.")
+            time.sleep(1)
+            return
+        time.sleep(0.5)
+
+    remaining = get_chrome_pids()
+    if remaining:
+        print(f"Force-killing {len(remaining)} remaining process(es)...")
+        subprocess.run(
+            ["pkill", "-9", "-f", "Google Chrome"], stderr=subprocess.DEVNULL
+        )
+        time.sleep(1)
 
 
 def warn_if_chrome_running():
-    """Print a warning and exit if Chrome is running."""
-    if is_chrome_running():
-        print("Error: Google Chrome is currently running.")
-        print("Please quit Chrome completely before running this tool.")
-        print("  (Cmd+Q or Chrome menu -> Quit Google Chrome)")
+    """Check for Chrome processes and offer to kill them."""
+    if not is_chrome_running():
+        return
+
+    pids = get_chrome_pids()
+    print(f"Warning: Found {len(pids)} Chrome process(es) still running.")
+    print("Chrome must be completely stopped (including background processes)")
+    print("for cookie import/export to work correctly.")
+    print()
+    answer = input("Kill all Chrome processes and continue? [y/N] ").strip().lower()
+    if answer in ("y", "yes"):
+        kill_chrome_processes()
+        if is_chrome_running():
+            print("Error: Could not stop all Chrome processes.")
+            sys.exit(1)
+    else:
+        print("Aborted. Please quit Chrome manually (Cmd+Q) and try again.")
         sys.exit(1)
 
 
@@ -275,11 +317,12 @@ def do_import(args):
 
         values = []
         for col in columns_to_insert:
-            val = cookie.get(col, "" if col in ("value", "host_key", "name", "path") else 0)
-            values.append(val)
+            if col == "value":
+                values.append("")
+            else:
+                val = cookie.get(col, "" if col in ("host_key", "name", "path") else 0)
+                values.append(val)
         values.append(encrypted)
-
-        cookie["value"] = ""
 
         try:
             conn.execute(
